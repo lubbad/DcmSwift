@@ -24,15 +24,18 @@ public class CFindSCU: ServiceClassUser {
         switch queryLevel {
         case .PATIENT:
             return [DicomConstants.PatientRootQueryRetrieveInformationModelFIND]
-            
+
         case .STUDY:
             return [DicomConstants.StudyRootQueryRetrieveInformationModelFIND]
-            
+
         case .SERIES:
             return [DicomConstants.StudyRootQueryRetrieveInformationModelFIND]
-            
+
         case .IMAGE:
             return [DicomConstants.StudyRootQueryRetrieveInformationModelFIND]
+
+        case .MWL:
+            return [DicomConstants.ModalityWorklistInformationModelFIND]
         }
     }
     
@@ -58,7 +61,11 @@ public class CFindSCU: ServiceClassUser {
         if let message = PDUEncoder.createDIMSEMessage(pduType: .dataTF, commandField: self.commandField, association: association) as? CFindRQ {
             let p:EventLoopPromise<Void> = channel.eventLoop.makePromise()
 
-            _ = queryDataset.set(value: "\(self.queryLevel)", forTagName: "QueryRetrieveLevel")
+            // Modality Worklist queries do not use the QueryRetrieveLevel
+            // attribute; setting it on an MWL query confuses some SCPs.
+            if queryLevel != .MWL {
+                _ = queryDataset.set(value: "\(self.queryLevel)", forTagName: "QueryRetrieveLevel")
+            }
 
             if let uid = instanceUID {
                 switch queryLevel {
