@@ -7,15 +7,15 @@
 //
 
 import Foundation
-import Quartz
 
-
-
+// DicomImage relies on AppKit/Quartz APIs (NSImage, NSBitmapImageRep,
+// NSImage.setName, etc.) that are unavailable on iOS. The upstream
+// "iOS" branches inside this file reference macOS-only types and do
+// not compile on iOS. Until proper iOS rendering is implemented, the
+// entire type is macOS-only.
 #if os(macOS)
+import Quartz
 import AppKit
-#elseif os(iOS)
-import UIKit
-#endif
 
 
 extension NSImage {
@@ -32,7 +32,7 @@ extension Data {
  Please refer to dicomiseasy : http://dicomiseasy.blogspot.com/2012/08/chapter-12-pixel-data.html
  */
 public class DicomImage {
-    
+
     /// Color space of the image
     public enum PhotometricInterpretation {
         case MONOCHROME1
@@ -49,99 +49,99 @@ public class DicomImage {
         case YBR_ICT
         case YBR_RCT
     }
-    
-    
+
+
     /// Indicates if a pixel is signed or unsigned
     public enum PixelRepresentation:Int {
         case Unsigned  = 0
         case Signed    = 1
     }
-    
-    
+
+
     private var dataset:DataSet!
     private var frames:[Data] = []
-    
+
     public var photoInter           = PhotometricInterpretation.RGB
     public var pixelRepresentation  = PixelRepresentation.Unsigned
     public var colorSpace           = CGColorSpaceCreateDeviceRGB()
-    
+
     public var isMultiframe     = false
     public var isMonochrome     = false
-    
+
     public var numberOfFrames   = 0
     public var rows             = 0
     public var columns          = 0
-    
+
     public var windowWidth      = -1
     public var windowCenter     = -1
     public var rescaleSlope     = 1
     public var rescaleIntercept = 0
-    
+
     public var samplesPerPixel  = 0
     public var bitsAllocated    = 0
     public var bitsStored       = 0
     public var bitsPerPixel     = 0
     public var bytesPerRow      = 0
-    
-    
-    
-    
+
+
+
+
     public init?(_ dataset:DataSet) {
         self.dataset = dataset
-        
+
         if let pi = self.dataset.string(forTag: "PhotometricInterpretation") {
             if pi.trimmingCharacters(in: CharacterSet.whitespaces) == "MONOCHROME1" {
                 self.photoInter = .MONOCHROME1
                 self.isMonochrome = true
-                
+
             } else if pi.trimmingCharacters(in: CharacterSet.whitespaces) == "MONOCHROME2" {
                 self.photoInter = .MONOCHROME2
                 self.isMonochrome = true
-                
+
             } else if pi.trimmingCharacters(in: CharacterSet.whitespaces) == "ARGB" {
                 self.photoInter = .ARGB
-                
+
             } else if pi.trimmingCharacters(in: CharacterSet.whitespaces) == "RGB" {
                 self.photoInter = .RGB
             }
         }
-        
+
         if let v = self.dataset.integer16(forTag: "Rows") {
             self.rows = Int(v)
         }
-        
+
         if let v = self.dataset.integer16(forTag: "Columns") {
             self.columns = Int(v)
         }
-        
+
         if let v = self.dataset.string(forTag: "WindowWidth") {
             self.windowWidth = Int(v) ?? self.windowWidth
         }
-        
+
         if let v = self.dataset.string(forTag: "WindowCenter") {
             self.windowCenter = Int(v) ?? self.windowCenter
         }
-        
+
         if let v = self.dataset.string(forTag: "RescaleSlope") {
             self.rescaleSlope = Int(v) ?? self.rescaleSlope
         }
-        
+
         if let v = self.dataset.string(forTag: "RescaleIntercept") {
             self.rescaleIntercept = Int(v) ?? self.rescaleIntercept
         }
-        
+
         if let v = self.dataset.integer16(forTag: "BitsAllocated") {
             self.bitsAllocated = Int(v)
         }
-        
+
         if let v = self.dataset.integer16(forTag: "BitsStored") {
             self.bitsStored = Int(v)
         }
-        
+
         if let v = self.dataset.integer16(forTag: "SamplesPerPixel") {
             self.samplesPerPixel = Int(v)
         }
-        
+
         if let v = self.dataset.integer16(forTag: "PixelRepresentation") {
             if v == 0 {
                 self.pixelRepresentation = .Unsigned
@@ -149,18 +149,18 @@ public class DicomImage {
                 self.pixelRepresentation = .Signed
             }
         }
-        
+
         if self.dataset.hasElement(forTagName: "PixelData") {
             self.numberOfFrames = 1
         }
-        
+
         if let nofString = self.dataset.string(forTag: "NumberOfFrames") {
             if let nof = Int(nofString) {
                 self.isMultiframe   = true
                 self.numberOfFrames = nof
             }
         }
-        
+
         Logger.verbose("  -> rows : \(self.rows)")
         Logger.verbose("  -> columns : \(self.columns)")
         Logger.verbose("  -> photoInter : \(photoInter)")
@@ -169,16 +169,11 @@ public class DicomImage {
         Logger.verbose("  -> samplesPerPixel : \(samplesPerPixel)")
         Logger.verbose("  -> bitsAllocated : \(bitsAllocated)")
         Logger.verbose("  -> bitsStored : \(bitsStored)")
-        
+
         self.loadPixelData()
     }
 
-    
 
-    
-    
-    
-#if os(macOS)
     /**
      Creates an `NSImage` for a given frame
      - Important: only for `macOS`
@@ -188,10 +183,10 @@ public class DicomImage {
             Logger.error("  -> No such frame (\(frame))")
             return nil
         }
-        
+
         let size = NSSize(width: self.columns, height: self.rows)
         let data = self.frames[frame]
-        
+
         if TransferSyntax.transfersSyntaxes.contains(self.dataset.transferSyntax.tsUID) {
             if let cgim = self.imageFromPixels(size: size, pixels: data.toUnsigned8Array(), width: self.columns, height: self.rows) {
                 return NSImage(cgImage: cgim, size: size)
@@ -200,46 +195,27 @@ public class DicomImage {
         else {
             return NSImage(data: data)
         }
-        
-        return nil
-    }
-    
-#elseif os(iOS)
-    /**
-     Creates an `UIImage` for a given frame
-     - Important: only for `iOS`
-     */
-    public func image(forFrame frame: Int) -> UIImage? {
-        if !frames.indices.contains(frame) { return nil }
-
-        let size = NSSize(width: self.columns, height: self.rows)
-        let data = self.frames[frame]
-
-        if let cgim = self.imageFromPixels(size: size, pixels: data.toUnsigned8Array(), width: self.columns, height: self.rows) {
-            return UIImage(cgImage: cgim, size: size)
-        }
 
         return nil
     }
-#endif
-    
-    
-    
-    
-    
+
+
+
+
+
     // MARK: - Private
-    
+
     private func imageFromPixels(size: NSSize, pixels: UnsafeRawPointer, width: Int, height: Int) -> CGImage? {
         var bitmapInfo:CGBitmapInfo = []
         //var __:UnsafeRawPointer = pixels
-        
+
         if self.isMonochrome {
             self.colorSpace = CGColorSpaceCreateDeviceGray()
-            
+
             //bitmapInfo = CGBitmapInfo.byteOrder16Host
-            
+
             if self.photoInter == .MONOCHROME1 {
-                
+
 
             } else if self.photoInter == .MONOCHROME2 {
 
@@ -249,25 +225,25 @@ public class DicomImage {
                 bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue)
             }
         }
-        
+
         self.bitsPerPixel = self.samplesPerPixel * self.bitsStored
         self.bytesPerRow  = width * (self.bitsAllocated / 8) * samplesPerPixel
         let dataLength = height * bytesPerRow // ??
-        
+
         Logger.verbose("  -> width : \(width)")
         Logger.verbose("  -> height : \(height)")
         Logger.verbose("  -> bytesPerRow : \(bytesPerRow)")
         Logger.verbose("  -> bitsPerPixel : \(bitsPerPixel)")
         Logger.verbose("  -> dataLength : \(dataLength)")
-        
+
         let imageData = NSData(bytes: pixels, length: dataLength)
         let providerRef = CGDataProvider(data: imageData)
-        
+
         if providerRef == nil {
             Logger.error("  -> FATAL: cannot allocate bitmap properly")
             return nil
         }
-        
+
         if let cgim = CGImage(
             width: width,
             height: height,
@@ -283,23 +259,23 @@ public class DicomImage {
         ) {
             return cgim
         }
-        
+
         Logger.error("  -> FATAL: invalid bitmap for CGImage")
-        
+
         return nil
     }
-    
-    
-    
-    
+
+
+
+
     private func processPresentationValues(pixels: [UInt8]) -> [UInt8] {
         var output:[UInt8] = pixels
-        
+
         Logger.verbose("  -> rescaleIntercept : \(self.rescaleIntercept)")
         Logger.verbose("  -> rescaleSlope : \(self.rescaleSlope)")
         Logger.verbose("  -> windowCenter : \(self.windowCenter)")
         Logger.verbose("  -> windowWidth : \(self.windowWidth)")
-        
+
         // sanity checks
         if rescaleIntercept != 0 || rescaleSlope != 1 {
             // pixel_data.collect!{|x| (slope * x) + intercept}
@@ -307,11 +283,11 @@ public class DicomImage {
                 (UInt8(rescaleSlope) * b) + UInt8(rescaleIntercept)
             }
         }
-        
+
         if self.windowWidth != -1 && self.windowCenter != -1 {
             let low = windowCenter - windowWidth / 2
             let high = windowCenter + windowWidth / 2
-            
+
             Logger.verbose("  -> low  : \(low)")
             Logger.verbose("  -> high : \(high)")
 
@@ -323,64 +299,53 @@ public class DicomImage {
                 }
             }
         }
-        
+
         return output
     }
-    
+
     /**
      Writes a dicom image to a png file, given a path, and a basename for the file
      There might be multiple frames, hence the base in basename
      files will be named like this: `<baseName>_0.png`, `<baseName>_1.png`, etc
-     
+
      If the basename is nil, an uid is generated
-     
+
      - Parameters:
         - path: where to save the PNG
         - baseName: the (root) name of the PNG file
      */
     public func toPNG(path: String, baseName: String?) {
-        
+
         let baseFilename: String
         if baseName == nil {
             baseFilename = UID.generate() + "_"
         } else {
             baseFilename = baseName! + "_"
         }
-        
+
         for frame in 0..<numberOfFrames {
             if let image = image(forFrame: frame) {
-                
+
                 var url = URL(fileURLWithPath: path)
                 url.appendPathComponent(baseFilename + String(frame) + ".png")
                 Logger.debug(url.absoluteString)
-                
+
                 image.setName(url.absoluteString)
-                
-                // image() gives different class following the OS
-                #if os(macOS)
+
                 if let data = image.png {
                     try? data.write(to: url)
                 }
-                #elseif os(iOS)
-                if let data = image.pngData() {
-                    do {
-                        try? data.write(to: url)
-                    } catch let error as NSError {
-                        print(error)
-                    }
-                }
-                #endif
             }
         }
     }
-    
+
     public func loadPixelData() {
         // refuse NON native DICOM TS for now
 //        if !DicomConstants.transfersSyntaxes.contains(self.dataset.transferSyntax) {
 //            Logger.error("  -> Unsuppoorted Transfer Syntax")
 //            return;
 //        }
-        
+
         if let pixelDataElement = self.dataset.element(forTagName: "PixelData") {
             // Pixel Sequence multiframe
             if let seq = pixelDataElement as? DataSequence {
@@ -394,7 +359,7 @@ public class DicomImage {
                 if self.numberOfFrames > 1 {
                     let frameSize = pixelDataElement.length / self.numberOfFrames
                     let chuncks = pixelDataElement.data.toUnsigned8Array().chunked(into: frameSize)
-                    
+
                     for c in chuncks {
                         self.frames.append(Data(c))
                     }
@@ -408,3 +373,4 @@ public class DicomImage {
         }
     }
 }
+#endif
