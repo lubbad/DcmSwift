@@ -171,12 +171,17 @@ public class DicomFile {
     
     /**
      Instance of DicomImage if available.
+
+     The rendering surface of `DicomImage` is macOS-only; on other
+     platforms the property is unavailable.
      */
+    #if os(macOS)
     public var dicomImage: DicomImage? {
         get {
             return DicomImage(self.dataset)
         }
     }
+    #endif
     
     
     /**

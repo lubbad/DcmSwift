@@ -8,16 +8,17 @@
 
 import Foundation
 
-// DicomImage relies on AppKit/Quartz APIs (NSImage, NSBitmapImageRep,
-// NSImage.setName, etc.) that are unavailable on iOS. The upstream
-// "iOS" branches inside this file reference macOS-only types and do
-// not compile on iOS. Until proper iOS rendering is implemented, the
-// entire type is macOS-only.
+// DicomImage's rendering surface (NSImage/NSBitmapImageRep/Quartz) is
+// macOS-only. The nested enums (`PhotometricInterpretation`,
+// `PixelRepresentation`) are pure data and used by cross-platform
+// callers (e.g. DicomRT), so they remain available on all platforms.
 #if os(macOS)
 import Quartz
 import AppKit
+#endif
 
 
+#if os(macOS)
 extension NSImage {
     var png: Data? { tiffRepresentation?.bitmap?.png }
 }
@@ -27,9 +28,16 @@ extension NSBitmapImageRep {
 extension Data {
     var bitmap: NSBitmapImageRep? { NSBitmapImageRep(data: self) }
 }
+#endif
+
+
 /**
  DicomImage is a wrapper that provides images related features for the DICOM standard.
  Please refer to dicomiseasy : http://dicomiseasy.blogspot.com/2012/08/chapter-12-pixel-data.html
+
+ On non-macOS platforms only the nested data enums are available;
+ the rendering API (initializer, `image(forFrame:)`, `toPNG`, etc.)
+ requires AppKit/Quartz and is conditionally compiled out.
  */
 public class DicomImage {
 
@@ -58,6 +66,7 @@ public class DicomImage {
     }
 
 
+#if os(macOS)
     private var dataset:DataSet!
     private var frames:[Data] = []
 
@@ -372,5 +381,5 @@ public class DicomImage {
             }
         }
     }
-}
 #endif
+}
