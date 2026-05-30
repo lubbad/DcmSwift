@@ -23,7 +23,15 @@ public class CEchoRSP: DataTF {
     
     
     public override func messageInfos() -> String {
-        return "\(dimseStatus.status)"
+        // `dimseStatus` is declared as `DIMSEStatus!` on the base class
+        // and is populated by `DataTF.decodeData`. The association's log
+        // path calls `messageInfos()` for every inbound message — at
+        // points where `decodeData` hasn't finished yet (or finished
+        // unsuccessfully and left `dimseStatus` nil) the original
+        // `"\(dimseStatus.status)"` form crashed the NIO event-loop
+        // thread with an implicit-unwrap trap. Guard it.
+        guard let status = dimseStatus?.status else { return "" }
+        return "\(status)"
     }
     
     

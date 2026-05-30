@@ -23,7 +23,11 @@ public class CStoreRSP: DataTF {
     
     
     public override func messageInfos() -> String {
-        return "\(dimseStatus.status)"
+        // See CEchoRSP for context — same nil-unwrap pattern. Guard
+        // the IUO so the NIO event loop survives logging an inbound
+        // response with a not-yet-populated `dimseStatus`.
+        guard let status = dimseStatus?.status else { return "" }
+        return "\(status)"
     }
     
     public override func data() -> Data? {
