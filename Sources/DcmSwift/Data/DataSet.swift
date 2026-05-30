@@ -355,8 +355,65 @@ public class DataSet: DicomObject {
     
     
     /**
+     Adds a Sequence (SQ) element for the given tag name with optionally a
+     single Item containing zero-value `DataElement` children for each of
+     the supplied tag names.
+
+     This is the public surface used to construct DICOM query datasets
+     (C-FIND) that include sequence-typed attributes, such as
+     `ScheduledProcedureStepSequence` (0040,0100) in Modality Worklist
+     queries. The classic pattern is an empty sequence with one item
+     listing the child attributes the SCU wants returned.
+
+     - Parameter name: The DICOM tag name of the sequence (e.g.
+       `"ScheduledProcedureStepSequence"`).
+     - Parameter itemTagNames: Child tag names to include inside a single
+       Item. If empty, the sequence is added with no items.
+     - Returns: The inserted `DataSequence`, or `nil` if the sequence tag
+       or any of the child tags are unknown to the DICOM dictionary, or
+       if the dataset is corrupted.
+     */
+    @discardableResult
+    public func setSequence(
+        forTagName name: String,
+        itemTagNames: [String] = []
+    ) -> DataSequence? {
+        if isCorrupted { return nil }
+        guard let sequenceTag = DicomSpec.shared.dataTag(forName: name) else { return nil }
+
+        let sequence = DataSequence(withTag: sequenceTag, dataset: self)
+        sequence.vr = .SQ
+        sequence.length = -1
+
+        if !itemTagNames.isEmpty {
+            let itemTag = DataTag(withGroup: "fffe", element: "e000")
+            let item = DataItem(withTag: itemTag, dataset: self, parent: sequence)
+            item.length = -1
+            for childName in itemTagNames {
+                guard let child = DataElement(withTagName: childName, dataset: self, parent: item) else {
+                    return nil
+                }
+                _ = child.setValue("")
+                item.elements.append(child)
+            }
+            sequence.items.append(item)
+        }
+
+        allElements.append(sequence)
+        if sequence.group == "0002" {
+            metaInformationHeaderElements.append(sequence)
+        } else {
+            datasetElements.append(sequence)
+        }
+        sortElements()
+        recalculateOffsets()
+
+        return sequence
+    }
+
+    /**
      Check if the `DataSet` has a `DataElement`
-     
+
      - Parameter name: name of the data element to find
      - Returns: a `Bool` indicating if the date element was found
      */
